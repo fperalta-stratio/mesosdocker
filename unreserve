@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+
+set -eu
+
+CURRDIR=`cd $(dirname $0); pwd`
+cd "$CURRDIR"
+
+
+if [[ "$FRAMEWORK" == "" ]]; then
+	echo "please set -fw parameter"
+else
+	if [[ -z "$service" ]]; then
+		export service="$FRAMEWORK"
+	fi
+
+	export token=`dcos config show core.dcos_acs_token`
+
+	for master in master-1 master-2 master-3; do
+		export leader="$master"
+
+		export response=`set -x && curl -ksI "http://"$leader":5050/master/state-summary" -w "%{response_code}" -H "Authorization: token=$token" | tail -1`
+		if [[ "$response" == "200" ]]; then
+			break;
+		fi
+	done
+
+	(set -x && curl -ksL "http://$leader:5050/master/frameworks" -H "Authorization: token=$token" > /tmp/frameworks.json)
+
+	(set -x && curl -ksL "http://$leader:5050/master/slaves" -H "Authorization: token=$token" > /tmp/slaves.json)
+
+	cat /tmp/frameworks.json \
+	      | jq -r --arg service "$service" '(.frameworks[] | select(.name==$service) | .principal), (.completed_frameworks[] | select(.name==$service) | .principal)' | sort --unique | while read principal; do
+
+		cat /tmp/slaves.json | jq -cMSr --arg principal "$principal" '.slaves[] | select(.reserved_resources_full[] | .[].reservation.principal==$principal).id' | sort --unique | while read slaveId; do
+
+			export resources=`cat /tmp/slaves.json | jq -cMS  --arg slaveId $slaveId --arg principal $principal \
+						'[[.slaves[] | select(.id==$slaveId).reserved_resources_full[] | select (.[].reservation.principal==$principal)] | .[][]]'`
+
+			echo "$resources" | jq -cMSr '.[] ' | while read resource; do
+				(set -x && curl -ksL "http://$leader:5050/master/unreserve" \
+				       -u "$principal:$MESOS_SECRET" \
+				       -XPOST -d slaveId="$slaveId" -d resources="[$resource]")
+			done
+
+		done
+
+	done
+fi

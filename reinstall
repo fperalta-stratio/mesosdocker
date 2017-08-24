@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+
+set -ue
+
+CURRDIR=`cd $(dirname $0); pwd`
+cd "$CURRDIR"
+
+
+if [[ "$FRAMEWORK" == "" ]]; then
+	echo "please set -fw parameter"
+else
+	if [[ -e "frameworks/$PROFILE.json" ]]; then
+		export FRAMEWORK_JSON="frameworks/$PROFILE.json"
+	else
+		export FRAMEWORK_JSON="frameworks/$FRAMEWORK.json"
+	fi
+
+	if [[ -z "$service" ]]; then
+		export service="$FRAMEWORK"
+	fi
+
+	dcos_acs_token=`dcos config show core.dcos_acs_token`
+
+    options=`eval "cat <<EOF
+{
+    \"packageName\": \"$FRAMEWORK\",
+    \"options\": $(<$FRAMEWORK_JSON)
+}
+EOF
+"`
+	curl -ksL -XPOST $EOS_SSO_URL/package/render \
+        -H "Accept: application/vnd.dcos.package.render-response+json;charset=utf-8;version=v1" \
+        -H "Content-Type: application/vnd.dcos.package.render-request+json;charset=utf-8;version=v1" \
+        -H "Authorization: token=$dcos_acs_token" \
+        -d "$options"  | jq -MSr '.marathonJson'  > /tmp/marathon-generated.json
+
+	curl -ksL -XPUT "$EOS_SSO_URL/service/marathon/v2/apps/$service?force=true" \
+	    -H "Accept: application/json" \
+	    -H "Content-Type: application/json; charset=utf-8" \
+	    -H "Cookie: dcos-acs-auth-cookie=$dcos_acs_token" -d@/tmp/marathon-generated.json
+
+fi

@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+
+CURDIR=`dirname "$0"`
+cd "$CURDIR"
+
+if [[ -z "$service" ]]; then
+	export service=$FRAMEWORK
+fi
+
+dcos_acs_token=`dcos config show core.dcos_acs_token`
+
+# curl -sk "$EOS_SSO_URL/marathon/v2/apps/$FRAMEWORK?embed=app.taskStats&embed=app.readiness" \
+#       -H "Authorization: token=$dcos_acs_token" | jq -MSr '.app'
+
+curl -ksL $EOS_SSO_URL/marathon/v2/groups \
+	-H "Cookie: dcos-acs-auth-cookie=$dcos_acs_token" \
+	  | jq -MSr --arg service "$service" '.apps[] | select(.id=="/"+$service)'

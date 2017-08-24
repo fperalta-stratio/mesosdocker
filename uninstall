@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+
+set -eu
+
+CURRDIR=`cd $(dirname $0); pwd`
+cd "$CURRDIR"
+
+if [[ "$FRAMEWORK" == "" ]]; then
+	echo "please set -fw parameter"
+else
+	if [[ -z "$service" ]]; then
+		export service="$FRAMEWORK"
+	fi
+
+	export token=`dcos config show core.dcos_acs_token`
+
+	for master in master-1 master-2 master-3; do
+		export leader="$master"
+
+		export response=`set -x && curl -ksI "http://"$leader":5050/master/state-summary" -w "%{response_code}" -H "Authorization: token=$token" | tail -1`
+		if [[ "$response" == "200" ]]; then
+			break;
+		fi
+	done
+
+	(set -x && curl -ksL "http://$leader:5050/master/frameworks" -H "Authorization: token=$token" > /tmp/frameworks.json)
+
+	(set -x && curl -ksL "http://$leader:5050/master/slaves" -H "Authorization: token=$token" > /tmp/slaves.json)
+
+	cat /tmp/frameworks.json \
+	      | jq -r --arg service "$service" '(.frameworks[] | select(.name==$service) | (.id + " " + .principal)), (.completed_frameworks[] | select(.name==$service) | (.id + " " + .principal))' \
+	      | sort --unique | while read l; do
+		export frameworkId=`echo "$l" | awk '{print $1}'`
+		export principal=`echo "$l" | awk '{print $2}'`
+
+		if [[ "$frameworkId"!="" && "$principal"!="" ]]; then
+			(set -x && curl -ksL "http://$leader:5050/master/teardown" \
+			       -u "$principal:$MESOS_SECRET" \
+			       -XPOST -d frameworkId="$frameworkId")
+			
+			cat /tmp/slaves.json | jq -cMSr --arg principal "$principal" '.slaves[] | select(.reserved_resources_full[] | .[].reservation.principal==$principal).id' | sort --unique | while read slaveId; do
+
+				export resources=`cat /tmp/slaves.json | jq -cMS  --arg slaveId $slaveId --arg principal $principal \
+							'[[.slaves[] | select(.id==$slaveId).reserved_resources_full[] | select (.[].reservation.principal==$principal)] | .[][]]'`
+
+				echo "$resources" | jq -cMSr '.[] | select(.name=="disk")' | while read disk; do
+					(set -x && curl -ksL "http://$leader:5050/master/destroy-volumes" \
+					       -u "$principal:$MESOS_SECRET" \
+					       -XPOST -d slaveId="$slaveId" -d volumes="[$disk]")
+				done
+
+			done
+		fi
+
+	done
+
+	(set -x && curl -ksL "$EOS_SSO_URL/marathon/v2/apps/$service" -XDELETE -H "Authorization: token=$token" )
+
+	(set -x && curl -ksL "$EOS_SSO_URL/exhibitor/exhibitor/v1/explorer/znode/dcos-service-$service" -XDELETE -H "Authorization: token=$token" )
+fi

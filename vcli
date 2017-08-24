@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+CURDIR=`dirname "$0"`
+cd "$CURDIR"
+
+cd paas-secret-utils
+
+./vcli -v "$VAULT_HOSTS" -p "$VAULT_PORT" -t "$VAULT_TOKEN" $@

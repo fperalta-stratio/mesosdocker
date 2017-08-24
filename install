@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+
+set -ue
+
+CURRDIR=`cd $(dirname $0); pwd`
+cd "$CURRDIR"
+
+
+if [[ "$FRAMEWORK" == "" ]]; then
+	echo "please set -fw parameter"
+else
+	if [[ -e "frameworks/$PROFILE.json" ]]; then
+		export FRAMEWORK_JSON="frameworks/$PROFILE.json"
+	else
+		export FRAMEWORK_JSON="frameworks/$FRAMEWORK.json"
+	fi
+
+	if [[ -z "$service" ]]; then
+		export service="$FRAMEWORK"
+	fi
+
+	dcos --log-level=ERROR package install --yes --app --options=<(eval "cat <<EOF
+$(<$FRAMEWORK_JSON)
+EOF
+	") "$FRAMEWORK"
+
+fi

@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+export SSO_IP=`getent ahostsv4 "sso.paas.labs.stratio.com" | head -n1 | awk '{print $1}'`
+
+if [[ -e environments/$ENVIRONMENT.pem ]]; then
+	export PEM_FILE_ARG="-i environments/$ENVIRONMENT.pem"
+fi
+
+sshpass -p "${EOS_BOOTSTRAP_PASSWORD}" \
+	ssh -ttt $PEM_FILE_ARG -o StrictHostKeyChecking=no ${EOS_BOOTSTRAP_USER}@$SSO_IP \
+	sudo cat /stratio_volume/vault_response | jq -r .root_token
+

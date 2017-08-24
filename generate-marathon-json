@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+
+CURDIR=`dirname "$0"`
+cd "$CURDIR"
+
+if [[ "$FRAMEWORK" == ""  ]]; then
+	echo "please set -fw parameter"
+else
+
+    if [[ -z "$service" ]]; then
+        export service=$FRAMEWORK
+    fi
+
+    if [[ -e "frameworks/$PROFILE.json" ]]; then
+        export FRAMEWORK_JSON="frameworks/$PROFILE.json"
+    else
+        export FRAMEWORK_JSON="frameworks/$FRAMEWORK.json"
+    fi
+
+	dcos_acs_token=`dcos config show core.dcos_acs_token`
+
+    options=`eval "cat <<EOF
+{
+    \"packageName\": \"$FRAMEWORK\",
+    \"options\": $(<$FRAMEWORK_JSON)
+}
+EOF
+"`
+
+  curl -sk -XPOST $EOS_SSO_URL/package/render \
+        -H "Accept: application/vnd.dcos.package.render-response+json;charset=utf-8;version=v1" \
+        -H "Content-Type: application/vnd.dcos.package.render-request+json;charset=utf-8;version=v1" \
+        -H "Authorization: token=$dcos_acs_token" \
+        -d "$options"  | jq -MSr '.marathonJson'
+
+fi

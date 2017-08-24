@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+
+set -e
+
+if [[ -z "$service" ]]; then
+	export service=$FRAMEWORK
+fi
+
+frameworkId=`dcos service --json | jq -r --arg serviceName $service '.[] | select(.name==$serviceName).id'`
+
+dcos task --json | jq -r --arg frameworkId $frameworkId  '.[] | select(.framework_id==$frameworkId).name' | sort --unique

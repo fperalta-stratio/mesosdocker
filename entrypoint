@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+
+if [[ "$ENVIRONMENT" != "" ]]; then
+	sudo bash -c "
+		(echo && cat environments/$ENVIRONMENT.hosts) >> /etc/hosts &&
+		(echo && cat environments/$ENVIRONMENT.env) >> /etc/profile &&
+		(echo && echo export DCOS_CONFIG=$HOME/environments/$ENVIRONMENT.dcos.toml) >> /etc/profile
+	"
+fi
+
+if [[ "$FRAMEWORK" != "" && -e frameworks/$FRAMEWORK.env ]]; then
+	sudo bash -c "
+		(echo && cat frameworks/$FRAMEWORK.env) >> /etc/profile
+	"
+fi
+
+if [[ "$PROFILE" != "" && -e frameworks/$PROFILE.env ]]; then
+	sudo bash -c "
+		(echo && cat frameworks/$PROFILE.env) >> /etc/profile
+	"
+fi
+
+source /etc/profile
+
+login >/dev/null 2>/dev/null
+
+eval $@
